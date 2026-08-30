@@ -3,8 +3,7 @@
   "crons": [{ "path": "/api/cron/refresh", "schedule": "0 3 * * *" }],
   "functions": {
     "api/index.ts": {
-      "maxDuration": 60,
-      "includeFiles": "node_modules/.prisma/client/**"
+      "maxDuration": 60
     }
   }
 }
