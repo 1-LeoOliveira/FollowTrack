@@ -4,7 +4,7 @@ import { startScheduler } from "./scheduler";
 
 const PORT = Number(process.env.PORT) || 3000;
 
-const app = createServer();
+const app = createServer({ serveStatic: true });
 
 app.listen(PORT, () => {
   console.log(`API rodando em http://localhost:${PORT}`);

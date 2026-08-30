@@ -41,5 +41,20 @@ export default function handler(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
-  app(req, res);
+  try {
+    app(req, res);
+  } catch (err) {
+    console.error("Erro ao processar requisicao:", err);
+    if (!res.headersSent) {
+      res.statusCode = 500;
+      res.setHeader("Content-Type", "application/json");
+      res.end(
+        JSON.stringify({
+          error: "Erro ao processar requisicao.",
+          details: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+        })
+      );
+    }
+  }
 }

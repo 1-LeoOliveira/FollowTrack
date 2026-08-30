@@ -4,12 +4,22 @@ import path from "path";
 import { profilesRouter } from "./routes/profiles";
 import { refreshAllProfiles } from "./services/profileService";
 
-export function createServer() {
+interface CreateServerOptions {
+  // So faz sentido em dev local: na Vercel, a pasta public/ e servida pela
+  // propria CDN, nao existe dentro do bundle da funcao serverless - tentar
+  // usar express.static la derruba a funcao pra qualquer rota sem match.
+  serveStatic?: boolean;
+}
+
+export function createServer(options: CreateServerOptions = {}) {
   const app = express();
 
   app.use(cors());
   app.use(express.json());
-  app.use(express.static(path.join(__dirname, "../public")));
+
+  if (options.serveStatic) {
+    app.use(express.static(path.join(__dirname, "../public")));
+  }
 
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
