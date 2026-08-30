@@ -1,5 +1,8 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
+  "rewrites": [
+    { "source": "/health", "destination": "/api" },
+    { "source": "/api/(.*)", "destination": "/api" }
+  ],
   "crons": [{ "path": "/api/cron/refresh", "schedule": "0 3 * * *" }],
   "functions": {
     "api/index.ts": {
