@@ -3,6 +3,7 @@ const API_KEY_STORAGE = "followtrack_api_key";
 
 const apikeyForm = document.getElementById("apikey-form");
 const apikeyInput = document.getElementById("apikey-input");
+const apikeyToggle = document.getElementById("apikey-toggle");
 
 const form = document.getElementById("add-form");
 const usernameInput = document.getElementById("username-input");
@@ -73,18 +74,38 @@ async function apiFetch(url, options = {}) {
   }
   const res = await fetch(url, { ...options, headers });
   if (res.status === 401) {
-    showError("API key invalida ou ausente. Confira o campo 'API key' acima.");
+    showError("API key invalida ou ausente.");
+    showApiKeyForm();
   }
   return res;
 }
 
+// So mostra o campo de API key quando ela ainda nao esta salva (ou quando
+// uma chamada volta 401, indicando que a chave salva nao e mais valida).
+// Evita deixar isso sempre visivel depois que ja foi configurada uma vez.
+function showApiKeyForm() {
+  apikeyForm.hidden = false;
+  apikeyToggle.hidden = true;
+  apikeyInput.focus();
+}
+
+function updateApiKeyVisibility() {
+  const hasKey = Boolean(getApiKey());
+  apikeyForm.hidden = hasKey;
+  apikeyToggle.hidden = !hasKey;
+}
+
 apikeyInput.value = getApiKey();
+updateApiKeyVisibility();
 
 apikeyForm.addEventListener("submit", (e) => {
   e.preventDefault();
   setApiKey(apikeyInput.value.trim());
+  updateApiKeyVisibility();
   loadProfiles();
 });
+
+apikeyToggle.addEventListener("click", showApiKeyForm);
 
 async function loadProfiles() {
   try {

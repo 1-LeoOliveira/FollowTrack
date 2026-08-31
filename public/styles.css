@@ -60,6 +60,10 @@ header h1 {
   font-size: 14px;
 }
 
+.apikey-form[hidden] {
+  display: none;
+}
+
 .add-form,
 .apikey-form {
   display: flex;
@@ -76,6 +80,20 @@ header h1 {
   font-size: 13px;
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+.apikey-toggle {
+  background: none;
+  color: var(--text-muted);
+  padding: 0;
+  font-size: 12px;
+  text-decoration: underline;
+  margin-bottom: 16px;
+}
+
+.apikey-toggle:hover {
+  background: none;
+  color: var(--accent);
 }
 
 .add-form input,
