@@ -1,4 +1,8 @@
 const API_BASE = "/api/profiles";
+const API_KEY_STORAGE = "followtrack_api_key";
+
+const apikeyForm = document.getElementById("apikey-form");
+const apikeyInput = document.getElementById("apikey-input");
 
 const form = document.getElementById("add-form");
 const usernameInput = document.getElementById("username-input");
@@ -35,12 +39,60 @@ function showError(message) {
   }, 5000);
 }
 
+function clearError() {
+  clearTimeout(showError._timer);
+  errorBanner.hidden = true;
+}
+
+function getApiKey() {
+  try {
+    return localStorage.getItem(API_KEY_STORAGE) || "";
+  } catch {
+    return "";
+  }
+}
+
+function setApiKey(key) {
+  try {
+    if (key) {
+      localStorage.setItem(API_KEY_STORAGE, key);
+    } else {
+      localStorage.removeItem(API_KEY_STORAGE);
+    }
+  } catch {
+    // localStorage indisponivel (ex.: navegacao privada); a chave so vale para esta pagina
+  }
+}
+
+// Wrapper em volta de fetch que sempre manda a API key salva no navegador.
+async function apiFetch(url, options = {}) {
+  const key = getApiKey();
+  const headers = new Headers(options.headers || {});
+  if (key) {
+    headers.set("Authorization", `Bearer ${key}`);
+  }
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401) {
+    showError("API key invalida ou ausente. Confira o campo 'API key' acima.");
+  }
+  return res;
+}
+
+apikeyInput.value = getApiKey();
+
+apikeyForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  setApiKey(apikeyInput.value.trim());
+  loadProfiles();
+});
+
 async function loadProfiles() {
   try {
-    const res = await fetch(API_BASE);
+    const res = await apiFetch(API_BASE);
     if (!res.ok) throw new Error("Falha ao carregar perfis.");
     const profiles = await res.json();
     renderProfiles(profiles);
+    clearError();
   } catch (err) {
     showError(err.message);
   }
@@ -107,7 +159,7 @@ profilesContainer.addEventListener("click", async (e) => {
     btn.disabled = true;
     btn.textContent = "Atualizando...";
     try {
-      const res = await fetch(`${API_BASE}/${encodeURIComponent(username)}/refresh`, { method: "POST" });
+      const res = await apiFetch(`${API_BASE}/${encodeURIComponent(username)}/refresh`, { method: "POST" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || "Falha ao atualizar.");
@@ -124,7 +176,7 @@ profilesContainer.addEventListener("click", async (e) => {
   if (action === "remove") {
     if (!confirm(`Parar de monitorar @${username}?`)) return;
     try {
-      const res = await fetch(`${API_BASE}/${encodeURIComponent(username)}`, { method: "DELETE" });
+      const res = await apiFetch(`${API_BASE}/${encodeURIComponent(username)}`, { method: "DELETE" });
       if (!res.ok && res.status !== 204) throw new Error("Falha ao remover.");
       await loadProfiles();
     } catch (err) {
@@ -145,7 +197,7 @@ form.addEventListener("submit", async (e) => {
   addButton.disabled = true;
   addButton.textContent = "Adicionando...";
   try {
-    const res = await fetch(API_BASE, {
+    const res = await apiFetch(API_BASE, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username }),
@@ -175,7 +227,7 @@ async function loadHistory() {
   if (!currentHistoryUsername) return;
   const days = daysSelect.value;
   try {
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_BASE}/${encodeURIComponent(currentHistoryUsername)}/history?days=${days}`
     );
     if (!res.ok) throw new Error("Falha ao carregar historico.");

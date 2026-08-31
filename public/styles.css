@@ -60,13 +60,26 @@ header h1 {
   font-size: 14px;
 }
 
-.add-form {
+.add-form,
+.apikey-form {
   display: flex;
+  align-items: center;
   gap: 8px;
+  margin-bottom: 16px;
+}
+
+.add-form {
   margin-bottom: 28px;
 }
 
-.add-form input {
+.apikey-form label {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.add-form input,
+.apikey-form input {
   flex: 1;
   padding: 10px 14px;
   border-radius: 8px;
@@ -76,7 +89,8 @@ header h1 {
   font-size: 14px;
 }
 
-.add-form input:focus {
+.add-form input:focus,
+.apikey-form input:focus {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
