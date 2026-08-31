@@ -31,8 +31,12 @@ npm run dev                 # sobe a API em http://localhost:3000
 
 - `POST /api/profiles` — cadastra um perfil e faz a primeira coleta
   imediatamente. Body: `{ "username": "danimoraisoficial" }`
-- `GET /api/profiles` — lista os perfis cadastrados com a ultima contagem.
+- `GET /api/profiles?q=busca&sort=followers|username|delta|createdAt&order=asc|desc` —
+  lista os perfis com a ultima contagem, variacao (`delta`/`deltaPercent`),
+  mini-historico (`sparkline`) e status de falha (`consecutiveFailures`,
+  `lastError`).
 - `GET /api/profiles/:username/history?days=30` — historico de seguidores.
+  Adicione `&format=csv` para baixar como CSV em vez de JSON.
 - `POST /api/profiles/:username/refresh` — forca uma coleta manual agora.
 - `POST /api/profiles/refresh-all` — forca a coleta de todos os perfis agora.
 - `DELETE /api/profiles/:username` — para de monitorar o perfil.
@@ -127,6 +131,34 @@ chame esta API a partir do **backend** desse outro projeto (ou de uma rota
 serverless dele), nunca direto do frontend, para nao expor a `API_KEY`
 publicamente. Se o outro projeto for um bot/servidor/script, chamar direto
 como nos exemplos acima e seguro.
+
+## Interface web
+
+Alem da API, `public/` tem um dashboard com: resumo (perfis monitorados,
+total de seguidores, maior crescimento), busca e ordenacao, mini-grafico de
+tendencia e indicador de crescimento (%) em cada card, aviso quando um perfil
+esta com falhas consecutivas de coleta, selecao de multiplos perfis para
+comparar num unico grafico, e exportacao de historico em CSV.
+
+## Robustez da coleta
+
+- Retry automatico com backoff exponencial quando o Instagram responde com
+  rate-limit (429), antes de desistir.
+- Cada perfil guarda `consecutiveFailures`/`lastError`/`lastErrorAt` — reseta
+  a zero na primeira coleta bem-sucedida seguinte.
+- Validacao do formato do username antes de tentar fazer scraping.
+- Logs estruturados (`src/utils/logger.ts`) em vez de `console.log` solto.
+
+## Testes
+
+```bash
+npm test
+```
+
+Cobre a logica de parsing do scraper, geracao de CSV e as rotas HTTP
+(autenticacao por API key, validacao de entrada, mapeamento de erros) com
+`vitest` + `supertest`, usando o `profileService` mockado — nao depende de
+banco de dados real.
 
 ## Exemplo de uso local
 

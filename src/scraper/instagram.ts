@@ -1,4 +1,5 @@
 import axios from "axios";
+import { log } from "../utils/logger";
 
 export interface InstagramProfileStats {
   username: string;
@@ -23,11 +24,24 @@ export class InstagramRateLimitError extends Error {
   }
 }
 
+const USERNAME_PATTERN = /^[a-zA-Z0-9._]{1,30}$/;
+
+export function isValidInstagramUsername(username: string): boolean {
+  return USERNAME_PATTERN.test(username);
+}
+
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 // App id publico usado pelo proprio site do Instagram nas chamadas do frontend.
 const IG_APP_ID = "936619743392459";
+
+const RATE_LIMIT_RETRIES = 2;
+const RATE_LIMIT_BASE_DELAY_MS = 1500;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function buildHeaders() {
   const headers: Record<string, string> = {
@@ -123,7 +137,7 @@ async function fetchViaHtmlFallback(username: string): Promise<InstagramProfileS
   };
 }
 
-function parseAbbreviatedNumber(raw: string): number {
+export function parseAbbreviatedNumber(raw: string): number {
   const cleaned = raw.replace(/,/g, "").trim();
   const multiplierMatch = cleaned.match(/^([\d.]+)\s*([kKmMbB])?$/);
   if (!multiplierMatch) {
@@ -136,13 +150,41 @@ function parseAbbreviatedNumber(raw: string): number {
   return Math.round(value * multiplier);
 }
 
-export async function fetchInstagramProfile(username: string): Promise<InstagramProfileStats> {
+async function fetchOnce(username: string): Promise<InstagramProfileStats> {
   try {
     return await fetchViaWebProfileInfo(username);
   } catch (err) {
     if (err instanceof InstagramNotFoundError || err instanceof InstagramRateLimitError) {
       throw err;
     }
+    log.warn("Endpoint principal falhou, tentando fallback HTML", {
+      username,
+      error: err instanceof Error ? err.message : String(err),
+    });
     return await fetchViaHtmlFallback(username);
   }
+}
+
+export async function fetchInstagramProfile(username: string): Promise<InstagramProfileStats> {
+  let lastErr: unknown;
+
+  for (let attempt = 0; attempt <= RATE_LIMIT_RETRIES; attempt++) {
+    try {
+      return await fetchOnce(username);
+    } catch (err) {
+      lastErr = err;
+      if (!(err instanceof InstagramRateLimitError) || attempt === RATE_LIMIT_RETRIES) {
+        throw err;
+      }
+      const delay = RATE_LIMIT_BASE_DELAY_MS * 2 ** attempt;
+      log.warn("Rate limit do Instagram, tentando de novo apos backoff", {
+        username,
+        attempt: attempt + 1,
+        delayMs: delay,
+      });
+      await sleep(delay);
+    }
+  }
+
+  throw lastErr;
 }

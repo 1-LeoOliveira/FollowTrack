@@ -2,16 +2,24 @@ import { NextFunction, Request, Response, Router } from "express";
 import {
   addProfile,
   getProfileHistory,
+  InvalidUsernameError,
+  ListProfilesOptions,
   listProfiles,
   refreshAllProfiles,
   refreshProfile,
   removeProfile,
+  snapshotsToCsv,
 } from "../services/profileService";
 import { InstagramNotFoundError, InstagramRateLimitError } from "../scraper/instagram";
 
 export const profilesRouter = Router();
 
+const MAX_HISTORY_DAYS = 365;
+
 function handleScraperError(err: unknown, res: Response) {
+  if (err instanceof InvalidUsernameError) {
+    return res.status(400).json({ error: err.message });
+  }
   if (err instanceof InstagramNotFoundError) {
     return res.status(404).json({ error: err.message });
   }
@@ -19,6 +27,22 @@ function handleScraperError(err: unknown, res: Response) {
     return res.status(429).json({ error: err.message });
   }
   return res.status(502).json({ error: err instanceof Error ? err.message : "Erro desconhecido" });
+}
+
+function parseDays(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 30;
+  return Math.min(Math.trunc(n), MAX_HISTORY_DAYS);
+}
+
+const SORT_VALUES = ["username", "followers", "delta", "createdAt"] as const;
+const ORDER_VALUES = ["asc", "desc"] as const;
+
+function parseListOptions(query: Request["query"]): ListProfilesOptions {
+  const q = typeof query.q === "string" && query.q.trim() ? query.q.trim() : undefined;
+  const sort = SORT_VALUES.find((v) => v === query.sort);
+  const order = ORDER_VALUES.find((v) => v === query.order);
+  return { q, sort, order };
 }
 
 // Encaminha rejeicoes de handlers async para o error-handling middleware do
@@ -48,24 +72,34 @@ profilesRouter.post(
   })
 );
 
-// GET /api/profiles
+// GET /api/profiles?q=busca&sort=followers|username|delta|createdAt&order=asc|desc
 profilesRouter.get(
   "/",
-  asyncHandler(async (_req, res) => {
-    const profiles = await listProfiles();
+  asyncHandler(async (req, res) => {
+    const profiles = await listProfiles(parseListOptions(req.query));
     res.json(profiles);
   })
 );
 
-// GET /api/profiles/:username/history?days=30
+// GET /api/profiles/:username/history?days=30[&format=csv]
 profilesRouter.get(
   "/:username/history",
   asyncHandler(async (req, res) => {
-    const days = Number(req.query.days) || 30;
+    const days = parseDays(req.query.days);
     const result = await getProfileHistory(req.params.username, days);
     if (!result) {
       return res.status(404).json({ error: "Perfil nao cadastrado." });
     }
+
+    if (req.query.format === "csv") {
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${result.profile.username}-historico.csv"`
+      );
+      return res.send(snapshotsToCsv(result.snapshots));
+    }
+
     res.json(result);
   })
 );

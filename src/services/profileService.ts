@@ -1,11 +1,33 @@
 import { prisma } from "../db";
-import { fetchInstagramProfile } from "../scraper/instagram";
+import { fetchInstagramProfile, isValidInstagramUsername } from "../scraper/instagram";
+import { log } from "../utils/logger";
+
+export class InvalidUsernameError extends Error {
+  constructor(username: string) {
+    super(
+      `Nome de usuario "${username}" invalido. Use apenas letras, numeros, pontos e underline (ate 30 caracteres).`
+    );
+    this.name = "InvalidUsernameError";
+  }
+}
+
+function cleanUsername(username: string) {
+  return username.trim().replace(/^@/, "");
+}
 
 export async function addProfile(username: string) {
-  const clean = username.trim().replace(/^@/, "");
+  const clean = cleanUsername(username);
+  if (!isValidInstagramUsername(clean)) {
+    throw new InvalidUsernameError(clean);
+  }
 
   const existing = await prisma.profile.findUnique({ where: { username: clean } });
   if (existing) {
+    if (!existing.isActive) {
+      // Perfil ja existia mas tinha sido removido (soft-delete) - reativa
+      // em vez de deixar o cadastro parecer bem-sucedido sem aparecer na lista.
+      return prisma.profile.update({ where: { id: existing.id }, data: { isActive: true } });
+    }
     return existing;
   }
 
@@ -35,7 +57,22 @@ export async function refreshProfile(username: string) {
     throw new Error(`Perfil "${username}" nao esta cadastrado.`);
   }
 
-  const stats = await fetchInstagramProfile(username);
+  let stats;
+  try {
+    stats = await fetchInstagramProfile(username);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await prisma.profile.update({
+      where: { id: profile.id },
+      data: {
+        consecutiveFailures: { increment: 1 },
+        lastError: message,
+        lastErrorAt: new Date(),
+      },
+    });
+    log.error("Falha ao coletar perfil", { username, error: message });
+    throw err;
+  }
 
   const snapshot = await prisma.snapshot.create({
     data: {
@@ -51,35 +88,80 @@ export async function refreshProfile(username: string) {
     data: {
       fullName: stats.fullName ?? profile.fullName,
       profilePicUrl: stats.profilePicUrl ?? profile.profilePicUrl,
+      consecutiveFailures: 0,
+      lastError: null,
+      lastErrorAt: null,
     },
   });
 
   return snapshot;
 }
 
-export async function listProfiles() {
+export interface ListProfilesOptions {
+  q?: string;
+  sort?: "username" | "followers" | "delta" | "createdAt";
+  order?: "asc" | "desc";
+}
+
+function computeGrowth(latest?: { followers: number }, previous?: { followers: number }) {
+  if (!latest || !previous) return { delta: null, deltaPercent: null };
+  const delta = latest.followers - previous.followers;
+  const deltaPercent = previous.followers > 0 ? (delta / previous.followers) * 100 : null;
+  return { delta, deltaPercent };
+}
+
+export async function listProfiles(options: ListProfilesOptions = {}) {
   const profiles = await prisma.profile.findMany({
-    where: { isActive: true },
+    where: {
+      isActive: true,
+      ...(options.q ? { username: { contains: options.q, mode: "insensitive" } } : {}),
+    },
     include: {
       snapshots: {
         orderBy: { fetchedAt: "desc" },
-        take: 2,
+        take: 14,
       },
     },
     orderBy: { createdAt: "asc" },
   });
 
-  return profiles.map((p) => {
+  let mapped = profiles.map((p) => {
     const [latest, previous] = p.snapshots;
+    const { delta, deltaPercent } = computeGrowth(latest, previous);
+    const sparkline = p.snapshots.map((s) => s.followers).reverse();
     return {
       username: p.username,
       fullName: p.fullName,
       profilePicUrl: p.profilePicUrl,
       createdAt: p.createdAt,
       latest: latest ?? null,
-      delta: latest && previous ? latest.followers - previous.followers : null,
+      delta,
+      deltaPercent,
+      sparkline,
+      consecutiveFailures: p.consecutiveFailures,
+      lastError: p.lastError,
+      lastErrorAt: p.lastErrorAt,
     };
   });
+
+  const sort = options.sort ?? "createdAt";
+  const order = options.order ?? (sort === "username" ? "asc" : "desc");
+  const dir = order === "asc" ? 1 : -1;
+
+  mapped = mapped.sort((a, b) => {
+    switch (sort) {
+      case "username":
+        return dir * a.username.localeCompare(b.username);
+      case "followers":
+        return dir * ((a.latest?.followers ?? -1) - (b.latest?.followers ?? -1));
+      case "delta":
+        return dir * ((a.delta ?? 0) - (b.delta ?? 0));
+      default:
+        return dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    }
+  });
+
+  return mapped;
 }
 
 export async function getProfileHistory(username: string, days: number) {
@@ -97,6 +179,14 @@ export async function getProfileHistory(username: string, days: number) {
   });
 
   return { profile, snapshots };
+}
+
+export function snapshotsToCsv(snapshots: { fetchedAt: Date; followers: number; following: number; posts: number }[]) {
+  const header = "data,seguidores,seguindo,posts";
+  const rows = snapshots.map(
+    (s) => `${s.fetchedAt.toISOString()},${s.followers},${s.following},${s.posts}`
+  );
+  return [header, ...rows].join("\n");
 }
 
 export async function removeProfile(username: string) {

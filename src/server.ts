@@ -3,6 +3,7 @@ import cors from "cors";
 import path from "path";
 import { profilesRouter } from "./routes/profiles";
 import { refreshAllProfiles } from "./services/profileService";
+import { log } from "./utils/logger";
 
 interface CreateServerOptions {
   // So faz sentido em dev local: na Vercel, a pasta public/ e servida pela
@@ -72,8 +73,12 @@ export function createServer(options: CreateServerOptions = {}) {
 
   // Rede de seguranca: qualquer erro nao tratado num handler cai aqui em vez
   // de derrubar o processo (essencial numa funcao serverless da Vercel).
-  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    console.error(err);
+  app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
+    log.error("Erro nao tratado numa rota", {
+      method: req.method,
+      path: req.path,
+      error: err instanceof Error ? err.message : String(err),
+    });
     res.status(500).json({ error: err instanceof Error ? err.message : "Erro interno do servidor." });
   });
 

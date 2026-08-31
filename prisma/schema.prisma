@@ -10,13 +10,16 @@ datasource db {
 }
 
 model Profile {
-  id            String     @id @default(cuid())
-  username      String     @unique
-  fullName      String?
-  profilePicUrl String?
-  isActive      Boolean    @default(true)
-  createdAt     DateTime   @default(now())
-  snapshots     Snapshot[]
+  id                  String     @id @default(cuid())
+  username            String     @unique
+  fullName            String?
+  profilePicUrl       String?
+  isActive            Boolean    @default(true)
+  createdAt           DateTime   @default(now())
+  consecutiveFailures Int        @default(0)
+  lastError           String?
+  lastErrorAt         DateTime?
+  snapshots           Snapshot[]
 }
 
 model Snapshot {
