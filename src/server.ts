@@ -26,6 +26,7 @@ export function createServer(options: CreateServerOptions = {}) {
   app.get("/api", (_req, res) => {
     res.json({
       name: "Numero de Seguidores API",
+      auth: "Todas as rotas /api/profiles/* exigem o header 'Authorization: Bearer <API_KEY>'.",
       endpoints: {
         "GET /health": "verifica se a API esta rodando",
         "GET /api/profiles": "lista os perfis monitorados com a ultima contagem",
@@ -36,6 +37,17 @@ export function createServer(options: CreateServerOptions = {}) {
         "DELETE /api/profiles/:username": "para de monitorar o perfil",
       },
     });
+  });
+
+  // Protege as rotas de perfis com uma API key, para que a API possa ser
+  // chamada com seguranca a partir de outros projetos. Se API_KEY nao
+  // estiver configurada (dev local), a checagem e pulada.
+  app.use("/api/profiles", (req, res, next) => {
+    const key = process.env.API_KEY;
+    if (key && req.headers.authorization !== `Bearer ${key}`) {
+      return res.status(401).json({ error: "API key invalida ou ausente." });
+    }
+    next();
   });
 
   app.use("/api/profiles", profilesRouter);

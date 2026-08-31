@@ -39,6 +39,9 @@ npm run dev                 # sobe a API em http://localhost:3000
 - `GET /api/cron/refresh` — usado pelo agendador (ver abaixo); protegido por
   `CRON_SECRET`.
 
+Todas as rotas `/api/profiles/*` exigem o header `Authorization: Bearer <API_KEY>`
+(ver secao "Usar esta API a partir de outro projeto" abaixo).
+
 ## Agendamento automatico
 
 - **Local / servidor proprio (`npm run dev` ou `npm start`):** um job
@@ -82,14 +85,60 @@ entre cada um para reduzir o risco de bloqueio), a rotina de refresh pode
 ultrapassar o limite do seu plano na Vercel — nesse caso, reduza a pausa em
 `src/services/profileService.ts` ou divida a coleta em lotes.
 
-## Exemplo de uso
+## Usar esta API a partir de outro projeto
+
+1. Configure a variavel `API_KEY` no projeto na Vercel (**Settings →
+   Environment Variables**) com um valor aleatorio — ela ainda nao existe
+   por padrao, entao as rotas `/api/profiles/*` ficam abertas ate voce
+   defini-la. Depois de criar, redeploy.
+2. No outro projeto, chame a API passando essa chave no header
+   `Authorization`:
+
+```bash
+curl https://followtrack-leo-oliveiras-projects.vercel.app/api/profiles \
+  -H "Authorization: Bearer SUA_API_KEY"
+```
+
+```js
+// fetch (Node.js ou navegador)
+const res = await fetch(
+  "https://followtrack-leo-oliveiras-projects.vercel.app/api/profiles",
+  { headers: { Authorization: "Bearer SUA_API_KEY" } }
+);
+const perfis = await res.json();
+```
+
+```js
+// cadastrar um novo perfil a partir do outro projeto
+await fetch("https://followtrack-leo-oliveiras-projects.vercel.app/api/profiles", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: "Bearer SUA_API_KEY",
+  },
+  body: JSON.stringify({ username: "danimoraisoficial" }),
+});
+```
+
+**Importante sobre onde chamar a API:** se o "outro projeto" for algo que
+roda no navegador do usuario (um site, um app), qualquer chave colocada no
+codigo JS do frontend fica visivel para quem abrir o DevTools — nesse caso,
+chame esta API a partir do **backend** desse outro projeto (ou de uma rota
+serverless dele), nunca direto do frontend, para nao expor a `API_KEY`
+publicamente. Se o outro projeto for um bot/servidor/script, chamar direto
+como nos exemplos acima e seguro.
+
+## Exemplo de uso local
 
 ```bash
 curl -X POST http://localhost:3000/api/profiles \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer SUA_API_KEY" \
   -d '{"username":"danimoraisoficial"}'
 
-curl http://localhost:3000/api/profiles
+curl http://localhost:3000/api/profiles \
+  -H "Authorization: Bearer SUA_API_KEY"
 
-curl http://localhost:3000/api/profiles/danimoraisoficial/history?days=7
+curl "http://localhost:3000/api/profiles/danimoraisoficial/history?days=7" \
+  -H "Authorization: Bearer SUA_API_KEY"
 ```
