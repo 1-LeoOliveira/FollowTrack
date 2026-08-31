@@ -1,6 +1,6 @@
 {
+  "redirects": [{ "source": "/", "destination": "/index.html", "permanent": false }],
   "rewrites": [
-    { "source": "/", "destination": "/index.html" },
     { "source": "/health", "destination": "/api" },
     { "source": "/api/(.*)", "destination": "/api" }
   ],
